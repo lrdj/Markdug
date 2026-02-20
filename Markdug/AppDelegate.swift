@@ -15,6 +15,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             defer: false
         )
         win.center()
+        win.setFrameAutosaveName("MarkdugMainWindow")
         win.title = "Markdug"
         win.delegate = self
         win.titlebarAppearsTransparent = false
@@ -114,8 +115,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             markedSrc = "window.marked={parse:s=>'<pre>'+s+'</pre>'};"
         }
 
+        let hljsSrc: String
+        if let p = Bundle.main.path(forResource: "highlight.min", ofType: "js"),
+           let js = try? String(contentsOfFile: p, encoding: .utf8) { hljsSrc = js } else { hljsSrc = "" }
+
+        let hljsCSS: String
+        if let p = Bundle.main.path(forResource: "highlight.min", ofType: "css"),
+           let css = try? String(contentsOfFile: p, encoding: .utf8) { hljsCSS = css } else { hljsCSS = "" }
+
+        let hljsDarkCSS: String
+        if let p = Bundle.main.path(forResource: "highlight-dark.min", ofType: "css"),
+           let css = try? String(contentsOfFile: p, encoding: .utf8) { hljsDarkCSS = css } else { hljsDarkCSS = "" }
+
         let html = """
         <!DOCTYPE html><html><head><meta charset="UTF-8">
+        <style>\(hljsCSS)</style>
+        <style>@media(prefers-color-scheme:dark){\(hljsDarkCSS)}</style>
         <style>
         body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:16px;line-height:1.6;max-width:820px;margin:0 auto;padding:40px 32px 80px;color:#24292f}
         @media(prefers-color-scheme:dark){body{background:#0d1117;color:#e6edf3}code{background:#161b22}pre{background:#161b22;border-color:#30363d}blockquote{border-color:#3d444d;color:#8b949e}table td,table th{border-color:#30363d}table tr:nth-child(2n){background:#161b22}a{color:#58a6ff}}
@@ -135,8 +150,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         img{max-width:100%}hr{height:4px;background:#d0d7de;border:0;border-radius:2px;margin:24px 0}
         </style></head><body>
         <script>\(markedSrc)</script>
+        <script>\(hljsSrc)</script>
         <div id="c"></div>
-        <script>document.getElementById('c').innerHTML=marked.parse(`\(escaped)`);</script>
+        <script>
+          document.getElementById('c').innerHTML = marked.parse(`\(escaped)`);
+          if (typeof hljs !== 'undefined') { hljs.highlightAll(); }
+        </script>
         </body></html>
         """
 

@@ -33,6 +33,16 @@ fi
 
 echo "✅ marked.js downloaded"
 
+# ── Fetch highlight.js (syntax highlighting) ──────────────────────────────────
+echo "📦 Fetching highlight.js..."
+curl -sfL "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" \
+     -o "$RESOURCES/highlight.min.js"
+curl -sfL "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" \
+     -o "$RESOURCES/highlight.min.css"
+curl -sfL "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" \
+     -o "$RESOURCES/highlight-dark.min.css"
+echo "✅ highlight.js downloaded"
+
 # ── Compile Swift source ─────────────────────────────────────────────────────
 echo "🔧 Compiling Swift..."
 
@@ -60,6 +70,14 @@ echo "✅ Swift compiled"
 
 # ── Copy Info.plist ──────────────────────────────────────────────────────────
 cp "$PROJECT_DIR/Markdug/Info.plist" "$CONTENTS/Info.plist"
+
+# ── Copy app icon (if present) ───────────────────────────────────────────────
+if [ -f "$PROJECT_DIR/Markdug/AppIcon.icns" ]; then
+    cp "$PROJECT_DIR/Markdug/AppIcon.icns" "$RESOURCES/AppIcon.icns"
+    echo "✅ AppIcon.icns copied"
+else
+    echo "⚠️  No AppIcon.icns found — skipping (app will use default icon)"
+fi
 
 # ── Copy marked.js into Resources ───────────────────────────────────────────
 # (already there from above)
