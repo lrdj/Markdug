@@ -5,18 +5,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     var window: NSWindow?
     var webView: WKWebView?
+    var currentFilePath: String?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let win = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 900, height: 700),
-            styleMask: [.titled, .closable, .resizable, .miniaturizable],
+            styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
-        win.title = "Markdug"
         win.center()
+        win.title = "Markdug"
         win.delegate = self
+        win.titlebarAppearsTransparent = false
 
+        // WebView
         let wv = WKWebView(frame: win.contentView!.bounds)
         wv.autoresizingMask = [.width, .height]
         win.contentView!.addSubview(wv)
@@ -27,6 +30,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         self.window = win
         self.webView = wv
 
+        // Add pill button inline in title bar — no extra height
+        addSublimeButton(to: win)
+
+        // Escape or Cmd+W quits
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             if event.keyCode == 53 || (event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers == "w") {
                 NSApp.terminate(nil)
@@ -41,10 +48,39 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             wv.loadHTMLString("""
                 <html><body style="font-family:system-ui;padding:60px;color:#999;text-align:center;">
                 <h2 style="margin-top:120px;">Markdug</h2>
-                <p>Run <code>mdview yourfile.md</code> to open a file.</p>
+                <p>Run <code>mdug yourfile.md</code> to open a file.</p>
                 </body></html>
             """, baseURL: nil)
         }
+    }
+
+    func addSublimeButton(to win: NSWindow) {
+        guard let titlebarView = win.standardWindowButton(.closeButton)?.superview else { return }
+
+        let button = NSButton(frame: NSRect(x: 0, y: 0, width: 120, height: 22))
+        button.title = "Open in Sublime"
+        button.bezelStyle = .roundRect
+        button.font = NSFont.systemFont(ofSize: 11, weight: .regular)
+        button.target = self
+        button.action = #selector(openInSublime)
+        button.autoresizingMask = [.minXMargin]
+
+        titlebarView.addSubview(button)
+
+        // Position to the right, vertically centred in title bar
+        button.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            button.trailingAnchor.constraint(equalTo: titlebarView.trailingAnchor, constant: -12),
+            button.centerYAnchor.constraint(equalTo: titlebarView.centerYAnchor)
+        ])
+    }
+
+    @objc func openInSublime() {
+        guard let path = currentFilePath else { return }
+        let task = Process()
+        task.launchPath = "/usr/local/bin/subl"
+        task.arguments = [path]
+        try? task.run()
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -61,6 +97,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             showError("Could not read: \(expandedPath)"); return
         }
 
+        currentFilePath = expandedPath
         let filename = URL(fileURLWithPath: expandedPath).lastPathComponent
         window?.title = filename
 
@@ -112,7 +149,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 }
 
-// Entry point — same pattern as working test
 let app = NSApplication.shared
 app.setActivationPolicy(.regular)
 let delegate = AppDelegate()
