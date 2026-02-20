@@ -6,7 +6,7 @@ This file is for AI assistants. It describes the architecture, design decisions,
 
 ## What Markdug is
 
-A minimal macOS app that renders Markdown files in a floating window. Triggered by a keyboard shortcut via Keyboard Maestro. No Dock icon. Press Escape or Cmd+W to quit.
+A minimal macOS app that renders Markdown files in a floating window. Triggered by a keyboard shortcut via Keyboard Maestro. Shows a Dock icon while open. Press Escape or Cmd+W to quit.
 
 It exists to fill a specific gap: the user edits `.md` files in Sublime Text and views them canonically on GitHub, but needed a fast zero-friction way to read Markdown locally without opening an editor or browser.
 
@@ -35,8 +35,9 @@ Markdug/
 ├── build.sh                   ← compiles and installs the app
 ├── km-macro.sh                ← Keyboard Maestro script (paste into KM manually)
 └── Markdug/
-    ├── AppDelegate.swift      ← the entire app (~150 lines)
-    └── Info.plist             ← app metadata, URL scheme registration
+    ├── AppDelegate.swift      ← the entire app (~175 lines)
+    ├── Info.plist             ← app metadata, URL scheme registration
+    └── AppIcon.icns           ← compiled icon (source was a 1024×1024 Display P3 PNG)
 ```
 
 ---
@@ -60,11 +61,16 @@ A single-file Swift app. No Xcode project, no storyboards, no SwiftUI. Just `App
 `build.sh` does everything in one shot:
 1. Creates the `.app` bundle directory structure manually
 2. Downloads `marked.min.js` from jsDelivr CDN into `Resources/`
-3. Compiles `AppDelegate.swift` with `swiftc` directly (no Xcode)
-4. Copies `Info.plist` into the bundle
-5. Installs to `/Applications/Markdug.app`
-6. Registers the URL scheme with Launch Services
-7. Creates `/usr/local/bin/mdug` CLI tool (Python script that calls `open -a Markdug --args <path>`)
+3. Downloads `highlight.min.js`, `highlight.min.css`, `highlight-dark.min.css` from cdnjs into `Resources/`
+4. Compiles `AppDelegate.swift` with `swiftc` directly (no Xcode)
+5. Copies `Info.plist` into the bundle
+6. Writes `Contents/PkgInfo` (`APPL????`)
+7. Copies `AppIcon.icns` into `Resources/`
+8. Installs to `/Applications/Markdug.app`
+9. Ad-hoc code signs the installed bundle (`codesign --force --deep --sign -`)
+10. Registers the URL scheme with Launch Services
+11. Flushes icon caches (`killall Finder && killall Dock`)
+12. Creates `/usr/local/bin/mdug` CLI tool (Python script that calls `open -a Markdug --args <path>`)
 
 ### The CLI tool
 
@@ -102,13 +108,30 @@ Using `NSTitlebarAccessoryViewController` to add the "Open in Sublime" button cr
 ### marked.js must be in Resources
 `Bundle.main.path(forResource: "marked.min", ofType: "js")` looks in the app bundle's Resources/ folder. The build script downloads it there. If it's missing, the app falls back to a `<pre>` tag renderer.
 
+### Invalid Info.plist silently breaks icons (and other metadata)
+If the app icon (or URL scheme, or version string) stops working, run `plutil -lint` on the plist first:
+```bash
+plutil -lint /Applications/Markdug.app/Contents/Info.plist
+```
+An invalid plist does **not** prevent the app from launching — it silently falls back to defaults for everything it can't read. The Markdug icon was invisible for this reason: `</dict>` instead of `</array>` on line 39 made the entire plist unreadable.
+
+### Hand-built bundles need PkgInfo + codesign + cache flush
+For a hand-built `.app` bundle (no Xcode), three steps are needed for the icon to display reliably:
+1. `Contents/PkgInfo` file containing the literal bytes `APPL????`
+2. `codesign --force --deep --sign -` applied after install
+3. `killall Finder && killall Dock` after `lsregister` to flush icon caches
+
+All three are now in `build.sh`.
+
 ---
 
 ## Current features
 
 - Renders GitHub-Flavoured Markdown (via marked.js)
+- Syntax highlighting in fenced code blocks (highlight.js 11.9.0 — GitHub light / GitHub Dark themes)
 - Dark mode support
-- Fenced code blocks (``` syntax) — rendered but not syntax highlighted
+- Custom app icon (displays in Finder and Dock)
+- Window size and position remembered between launches
 - "Open in Sublime" pill button in title bar (calls `/usr/local/bin/subl`)
 - Toggle behaviour via Keyboard Maestro (⌥Space opens, ⌥Space again closes)
 - Escape or Cmd+W quits the app entirely
@@ -116,10 +139,8 @@ Using `NSTitlebarAccessoryViewController` to add the "Open in Sublime" button cr
 
 ---
 
-## Planned features (v1.1)
+## Planned features
 
-- Syntax highlighting in code blocks (highlight.js)
-- Remember window size and position between launches
 - Trigger from Sublime Text (not just Finder) — open the currently active file
 - Remove Dock icon (.accessory activation policy) — previously caused silent window failure, needs revisiting
 
@@ -132,6 +153,7 @@ Using `NSTitlebarAccessoryViewController` to add the "Open in Sublime" button cr
 - Sublime Text (with `subl` CLI at `/usr/local/bin/subl`)
 - Keyboard Maestro for hotkey triggering
 - marked.js loaded from jsDelivr CDN at build time
+- highlight.js 11.9.0 loaded from cdnjs at build time
 
 ---
 
@@ -160,4 +182,26 @@ pgrep -x Markdug
 ### Kill Markdug
 ```bash
 pkill Markdug
+```
+
+### Regenerate the app icon from a new PNG
+The source PNG must be 1024×1024. If it's Display P3 (common for screenshots and exports from
+design tools), convert to sRGB first — macOS icon services can misread P3 assets.
+
+```bash
+# Convert colour space (safe to run even if already sRGB)
+sips --matchTo '/System/Library/ColorSync/Profiles/sRGB Profile.icc' input.png --out /tmp/icon_srgb.png
+
+# Generate all required sizes
+mkdir -p /tmp/app.iconset
+for size in 16 32 128 256 512; do
+    sips -z $size $size /tmp/icon_srgb.png --out /tmp/app.iconset/icon_${size}x${size}.png
+    sips -z $((size*2)) $((size*2)) /tmp/icon_srgb.png --out /tmp/app.iconset/icon_${size}x${size}@2x.png
+done
+
+# Compile
+iconutil -c icns /tmp/app.iconset -o Markdug/AppIcon.icns
+
+# Rebuild the app
+./build.sh
 ```

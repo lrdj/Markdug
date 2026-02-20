@@ -2,7 +2,7 @@
 
 ---
 
-## v1.1 (in progress) — 2026-02-20
+## v1.1 — 2026-02-20
 
 ### Added
 - **Syntax highlighting** in fenced code blocks via highlight.js 11.9.0
@@ -15,11 +15,12 @@
   - Implemented via `NSWindow.setFrameAutosaveName` (one line, AppKit handles the rest)
   - First launch centers at 900×700; subsequent launches restore saved frame
 
-- **App icon** — custom icon support wired up
+- **App icon** — custom icon displaying correctly in Finder and Dock
   - `CFBundleIconFile` and `CFBundleIconName` added to Info.plist
   - `build.sh` copies `Markdug/AppIcon.icns` into the bundle at build time
-  - Icon file (`AppIcon.icns`) is generated from a 1024×1024 RGBA PNG
-  - ⚠️ Icon not yet displaying in Finder or Dock — debugging in progress (see below)
+  - Source was a 1024×1024 Display P3 PNG; converted to sRGB with `sips`, scaled to all
+    required sizes, and compiled to `AppIcon.icns` with `iconutil`
+  - See debugging notes below for the full root cause investigation
 
 ### Changed
 - `LSUIElement` removed from Info.plist (was `true`, conflicted with `.regular` activation policy)
@@ -32,20 +33,39 @@
   - `orderFrontRegardless()` → no Dock interaction but window in background, no scroll without click
   - Decision: live with Dock icon while app is running; `.accessory` not worth the UX trade-offs
 
-### Known issue — icon not displaying
-Everything appears correctly configured but the icon does not show in Finder or the Dock:
-- `AppIcon.icns` present in `Contents/Resources/` ✅
-- `CFBundleIconFile` + `CFBundleIconName` in Info.plist ✅
-- Ad-hoc code signature applied (`codesign --force --deep --sign -`) ✅
-- Various icon cache clears attempted (`lsregister`, `killall Dock`, `killall iconservicesd`, etc.)
+### Icon debugging — root cause and fix
 
-**Next steps to try:**
-1. Check for quarantine xattr: `xattr -l /Applications/Markdug.app`
-2. Convert source PNG from Display P3 → sRGB before generating icns
-3. Add `PkgInfo` file to bundle (`Contents/PkgInfo` containing `APPL????`)
-4. Use `ditto` instead of `cp -R` in build.sh for the install step
-5. Add `codesign` step to build.sh (after install)
-6. More aggressive icon cache clear: `sudo rm -rf /Library/Caches/com.apple.iconservices.store`
+The icon was not displaying in Finder or the Dock despite the `.icns` file being present and
+`CFBundleIconFile` being set. Root cause: **the `Info.plist` was invalid XML**.
+
+The `CFBundleURLTypes` array was closed with `</dict>` instead of `</array>`, which made the
+entire plist unreadable by macOS. Because the plist couldn't be parsed, `CFBundleIconFile` was
+never read, and macOS fell back to the default white-grid icon.
+
+**Diagnosis approach:**
+
+The most useful step was an isolation test: build a completely minimal Hello World app bundle
+from scratch on the same machine, give it a known-good sRGB red square icon, and check whether
+*that* shows correctly. It did — immediately, in both Finder and Dock. This ruled out environment
+issues (macOS version, icon cache, machine-level quarantine, etc.) and confirmed the problem was
+specific to Markdug's bundle.
+
+From there: `plutil -lint /Applications/Markdug.app/Contents/Info.plist` immediately reported:
+
+```
+(Close tag on line 39 does not match open tag array)
+```
+
+**The fix:** One character change in `Markdug/Info.plist`, line 39: `</dict>` → `</array>`.
+
+**Other improvements made during debugging** (all now in `build.sh`):
+- `PkgInfo` file written to `Contents/PkgInfo` (`APPL????`) — recommended for hand-built bundles
+- `codesign --force --deep --sign -` run after install
+- `killall Finder && killall Dock` run after `lsregister` to flush icon caches
+
+**Lesson:** When an icon (or any app metadata) silently fails, run `plutil -lint` on `Info.plist`
+first. An invalid plist gives no error at launch — the app still runs — but metadata like icons,
+URL schemes, and version strings are simply not read.
 
 ---
 
