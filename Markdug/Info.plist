@@ -36,7 +36,7 @@
 				<string>markdownviewer</string>
 			</array>
 		</dict>
-	</dict>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

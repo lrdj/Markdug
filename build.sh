@@ -71,6 +71,9 @@ echo "✅ Swift compiled"
 # ── Copy Info.plist ──────────────────────────────────────────────────────────
 cp "$PROJECT_DIR/Markdug/Info.plist" "$CONTENTS/Info.plist"
 
+# ── Write PkgInfo ─────────────────────────────────────────────────────────────
+printf 'APPL????' > "$CONTENTS/PkgInfo"
+
 # ── Copy app icon (if present) ───────────────────────────────────────────────
 if [ -f "$PROJECT_DIR/Markdug/AppIcon.icns" ]; then
     cp "$PROJECT_DIR/Markdug/AppIcon.icns" "$RESOURCES/AppIcon.icns"
@@ -91,10 +94,19 @@ echo "📲 Installing to /Applications..."
 rm -rf "/Applications/$APP_NAME.app"
 cp -R "$APP_BUNDLE" "/Applications/$APP_NAME.app"
 
+# ── Code sign ────────────────────────────────────────────────────────────────
+echo "🔏 Signing..."
+codesign --force --deep --sign - "/Applications/$APP_NAME.app"
+
 # ── Register URL scheme ──────────────────────────────────────────────────────
 echo "🔗 Registering URL scheme..."
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
     -f "/Applications/$APP_NAME.app" 2>/dev/null || true
+
+# ── Flush icon caches ─────────────────────────────────────────────────────────
+echo "🔄 Flushing icon caches..."
+killall Finder 2>/dev/null || true
+killall Dock 2>/dev/null || true
 
 # ── Create CLI helper ────────────────────────────────────────────────────────
 CLI_PATH="/usr/local/bin/mdug"
