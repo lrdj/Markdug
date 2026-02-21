@@ -55,7 +55,7 @@ swiftc \
     -o "$MACOS/$APP_NAME" \
     -framework Cocoa \
     -framework WebKit \
-    -target arm64-apple-macosx26.0 \
+    -target arm64-apple-macosx15.0 \
     2>&1 || {
         echo "⚠️  arm64 failed, trying x86_64..."
         swiftc \
@@ -63,7 +63,7 @@ swiftc \
             -o "$MACOS/$APP_NAME" \
             -framework Cocoa \
             -framework WebKit \
-            -target x86_64-apple-macosx26.0
+            -target x86_64-apple-macosx15.0
     }
 
 echo "✅ Swift compiled"
@@ -132,6 +132,7 @@ subprocess.run([
 ])
 CLIPYTHON
 
+sudo mkdir -p /usr/local/bin
 sudo cp /tmp/mdug_cli "$CLI_PATH"
 sudo chmod +x "$CLI_PATH"
 

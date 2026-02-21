@@ -27,7 +27,15 @@ xcode-select --install
 
 A dialog will appear. Click Install. Takes a few minutes.
 
-### 2. Find your macOS target version
+### 2. Sublime Text CLI (`subl`)
+
+The "Open in Sublime" button requires the `subl` CLI. Run this once:
+
+```bash
+sudo ln -s "/Applications/Sublime Text.app/Contents/SharedSupport/bin/subl" /usr/local/bin/subl
+```
+
+### 3. Find your macOS target version
 
 This is the most important step — the build script needs to match your macOS version or the window won't appear.
 
