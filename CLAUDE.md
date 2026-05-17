@@ -123,6 +123,24 @@ For a hand-built `.app` bundle (no Xcode), three steps are needed for the icon t
 
 All three are now in `build.sh`.
 
+### Lapsed Keyboard Maestro trial silently disables the trigger
+If ⌥Space stops opening Markdug and instead opens the file in some *other* app
+(e.g. a full-screen black/white window with an "open markdown editor" button —
+that string is **not** in this codebase), the prime suspect is **not the code**.
+When the Keyboard Maestro trial/licence lapses, the **KM Engine stops executing
+macros entirely** — the macro never fires, and the `.md` file falls through to
+whatever else handles it. Symptoms are environmental, not a build problem.
+
+Diagnose in this order before touching any code:
+1. Is the KM menu-bar icon present? Absent ⇒ Engine not running ⇒ no macros.
+2. Has the trial lapsed? The recurring "Continue Trial" popup is the warning.
+3. Quit & relaunch Keyboard Maestro, click **Run** on the macro to re-arm.
+4. Prove the app itself is fine (bypasses KM):
+   `/Applications/Markdug.app/Contents/MacOS/Markdug ~/Sites/Markdug/README.md`
+
+See `refactor-loose-KBM-May17.md` for the full investigation write-up and
+KM-independent trigger options (Shortcuts/Automator, `skhd`+launchd, Raycast).
+
 ---
 
 ## Current features
@@ -143,6 +161,7 @@ All three are now in `build.sh`.
 
 - Trigger from Sublime Text (not just Finder) — open the currently active file
 - Remove Dock icon (.accessory activation policy) — previously caused silent window failure, needs revisiting
+- KM-independent trigger — remove the single point of failure on the Keyboard Maestro licence/Engine (Shortcuts/Automator Quick Action, `skhd`+launchd, or Raycast all calling the existing `km-macro.sh`); see `refactor-loose-KBM-May17.md`
 
 ---
 

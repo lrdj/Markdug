@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Applications/Markdug.app/Contents/MacOS/**)",
+      "Read(//Applications/Markdug.app/Contents/Resources/**)"
+    ]
+  }
+}
