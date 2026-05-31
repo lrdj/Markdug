@@ -6,7 +6,7 @@ This file is for AI assistants. It describes the architecture, design decisions,
 
 ## What Markdug is
 
-A minimal macOS app that renders Markdown files in a floating window. Triggered by a keyboard shortcut via Keyboard Maestro. Shows a Dock icon while open. Press Escape or Cmd+W to quit.
+A minimal macOS app that renders Markdown files in a floating window. Triggered by a keyboard shortcut via **skhd** (a free, open-source hotkey daemon — replaced Keyboard Maestro on 2026-05-31). Shows a Dock icon while open. Press Escape or Cmd+W to quit.
 
 It exists to fill a specific gap: the user edits `.md` files in Sublime Text and views them canonically on GitHub, but needed a fast zero-friction way to read Markdown locally without opening an editor or browser.
 
@@ -17,12 +17,16 @@ It exists to fill a specific gap: the user edits `.md` files in Sublime Text and
 ```
 User selects .md file in Finder
   → presses ⌥Space
-  → Keyboard Maestro macro fires
+  → skhd (hotkey daemon) fires the bound command: km-macro.sh
   → checks if Markdug is already running (if yes: quits it — toggle behaviour)
   → if no: calls /Applications/Markdug.app/Contents/MacOS/Markdug /path/to/file.md
   → Markdug window appears with rendered Markdown
   → user presses Escape, Cmd+W, or clicks the red traffic light to quit
 ```
+
+The trigger script (`km-macro.sh`) is unchanged from the Keyboard Maestro era —
+only the thing that binds ⌥Space to it changed (KM → skhd). The filename is kept
+for continuity; it is no longer Keyboard Maestro-specific.
 
 ---
 
@@ -33,7 +37,9 @@ Markdug/
 ├── CLAUDE.md                  ← you are here
 ├── README.md                  ← user-facing install instructions
 ├── build.sh                   ← compiles and installs the app
-├── km-macro.sh                ← Keyboard Maestro script (paste into KM manually)
+├── install-trigger.sh         ← installs skhd + ~/.skhdrc (the ⌥Space hotkey)
+├── skhdrc                      ← committed skhd config (copied to ~/.skhdrc)
+├── km-macro.sh                ← the trigger script skhd runs (reads Finder selection, launches app)
 └── Markdug/
     ├── AppDelegate.swift      ← the entire app (~175 lines)
     ├── Info.plist             ← app metadata, URL scheme registration
@@ -76,14 +82,32 @@ A single-file Swift app. No Xcode project, no storyboards, no SwiftUI. Just `App
 
 `/usr/local/bin/mdug` is a small Python 3 script installed by `build.sh`. It takes a file path, resolves it to an absolute path, and launches the app via `open -a Markdug --args`.
 
-### Keyboard Maestro macro
+### The hotkey trigger (skhd)
 
-Not in the repo as an importable file — must be set up manually. The script is in `km-macro.sh`. Key behaviours:
+Since 2026-05-31 the ⌥Space hotkey is supplied by **skhd**, a tiny free
+open-source hotkey daemon (`brew install koekeishiya/formulae/skhd`). It runs as
+a LaunchAgent (auto-starts at login) and needs a one-time Accessibility grant.
+
+- Config lives in `~/.skhdrc` (committed to the repo as `skhdrc`); the single
+  binding is `alt - space : ~/Sites/Markdug/km-macro.sh`.
+- `install-trigger.sh` installs skhd, writes `~/.skhdrc` (rewriting the path to
+  wherever the repo was cloned), and starts the service.
+- This replaced Keyboard Maestro, whose lapsed-trial dormancy was a recurring
+  single point of failure (see the gotcha below and `refactor-loose-KBM-May17.md`).
+
+`km-macro.sh` itself (the script skhd runs) is unchanged. Key behaviours:
 - Uses AppleScript to get the selected file path from Finder
 - Checks if Markdug is running via `pgrep` — if yes, kills it (toggle)
 - Checks file extension is `.md`, `.markdown`, `.mdx`, or `.mdown`
 - Launches via the full app binary path: `/Applications/Markdug.app/Contents/MacOS/Markdug "$FILEPATH" &`
-- Set to run **Asynchronously** in KM so it doesn't block
+
+**skhd gotchas:**
+- If ⌥Space stops working, check the daemon is running (`pgrep -lx skhd`) and the
+  error log: `tail /tmp/skhd_$USER.err.log`. The message
+  `must be run with accessibility access` means the Accessibility permission was
+  lost (common after a major OS update) — re-grant it for `/opt/homebrew/bin/skhd`
+  and run `skhd --restart-service`.
+- An **empty** err log after a restart = accessibility OK, daemon capturing.
 
 ---
 
@@ -123,23 +147,20 @@ For a hand-built `.app` bundle (no Xcode), three steps are needed for the icon t
 
 All three are now in `build.sh`.
 
-### Lapsed Keyboard Maestro trial silently disables the trigger
-If ⌥Space stops opening Markdug and instead opens the file in some *other* app
-(e.g. a full-screen black/white window with an "open markdown editor" button —
-that string is **not** in this codebase), the prime suspect is **not the code**.
-When the Keyboard Maestro trial/licence lapses, the **KM Engine stops executing
-macros entirely** — the macro never fires, and the `.md` file falls through to
-whatever else handles it. Symptoms are environmental, not a build problem.
+### (Historical) Lapsed Keyboard Maestro trial silently disabled the trigger
+**Resolved 2026-05-31 by moving the hotkey to skhd — kept here for context.**
+When the trigger was Keyboard Maestro, a lapsed trial/licence silently stopped
+the KM Engine from executing macros: ⌥Space never fired, and the `.md` file fell
+through to whatever else handled it (the "full-screen black window with an 'open
+markdown editor' button" symptom — that string is **not** in this codebase). The
+recurring "Continue Trial" popup was the warning sign.
 
-Diagnose in this order before touching any code:
-1. Is the KM menu-bar icon present? Absent ⇒ Engine not running ⇒ no macros.
-2. Has the trial lapsed? The recurring "Continue Trial" popup is the warning.
-3. Quit & relaunch Keyboard Maestro, click **Run** on the macro to re-arm.
-4. Prove the app itself is fine (bypasses KM):
+That single point of failure is gone now that skhd (free, no licence) supplies
+the hotkey. If ⌥Space misbehaves today, see the **skhd gotchas** above, not this
+section. The app itself can always be proven healthy independent of the trigger:
    `/Applications/Markdug.app/Contents/MacOS/Markdug ~/Sites/Markdug/README.md`
 
-See `refactor-loose-KBM-May17.md` for the full investigation write-up and
-KM-independent trigger options (Shortcuts/Automator, `skhd`+launchd, Raycast).
+See `refactor-loose-KBM-May17.md` for the original investigation write-up.
 
 ---
 
@@ -151,7 +172,7 @@ KM-independent trigger options (Shortcuts/Automator, `skhd`+launchd, Raycast).
 - Custom app icon (displays in Finder and Dock)
 - Window size and position remembered between launches
 - "Open in Sublime" pill button in title bar (calls `/usr/local/bin/subl`)
-- Toggle behaviour via Keyboard Maestro (⌥Space opens, ⌥Space again closes)
+- Toggle behaviour via skhd hotkey (⌥Space opens, ⌥Space again closes)
 - Escape or Cmd+W quits the app entirely
 - Closing the window quits the app entirely
 
@@ -161,7 +182,12 @@ KM-independent trigger options (Shortcuts/Automator, `skhd`+launchd, Raycast).
 
 - Trigger from Sublime Text (not just Finder) — open the currently active file
 - Remove Dock icon (.accessory activation policy) — previously caused silent window failure, needs revisiting
-- KM-independent trigger — remove the single point of failure on the Keyboard Maestro licence/Engine (Shortcuts/Automator Quick Action, `skhd`+launchd, or Raycast all calling the existing `km-macro.sh`); see `refactor-loose-KBM-May17.md`
+
+## Done
+
+- ~~KM-independent trigger~~ — **done 2026-05-31**: replaced Keyboard Maestro with
+  skhd (see `install-trigger.sh`, `skhdrc`). Removes the licence/Engine single
+  point of failure.
 
 ---
 
@@ -170,7 +196,7 @@ KM-independent trigger options (Shortcuts/Automator, `skhd`+launchd, Raycast).
 - Developer machine: macOS 26.3, Apple Silicon
 - Swift 6.2.3
 - Sublime Text (with `subl` CLI at `/usr/local/bin/subl`)
-- Keyboard Maestro for hotkey triggering
+- skhd for hotkey triggering (`brew install koekeishiya/formulae/skhd`)
 - marked.js loaded from jsDelivr CDN at build time
 - highlight.js 11.9.0 loaded from cdnjs at build time
 
@@ -186,6 +212,14 @@ cd ~/path/to/Markdug && ./build.sh
 ### Test the app directly
 ```bash
 /Applications/Markdug.app/Contents/MacOS/Markdug ~/path/to/file.md
+```
+
+### Set up / repair the ⌥Space hotkey (skhd)
+```bash
+cd ~/path/to/Markdug && ./install-trigger.sh   # then grant Accessibility to skhd
+skhd --restart-service                           # after granting/repairing permission
+pgrep -lx skhd                                   # is the daemon running?
+tail /tmp/skhd_$USER.err.log                     # empty = accessibility OK
 ```
 
 ### Test the CLI

@@ -89,3 +89,35 @@ unchanged. Recommended next step if KM licensing becomes a recurring nuisance.
 - No code changes required.
 - Repo, build script, macro script, and installed app all verified healthy.
 - Issue was environmental (KM Engine dormant after trial lapse) and is resolved.
+
+---
+
+## Update — 2026-05-31: KM retired, replaced by skhd ✅
+
+The "optional" recommendation #3 above was implemented. Keyboard Maestro is no
+longer in the trigger chain — the recurring trial-lapse dormancy made it a
+permanent single point of failure not worth paying ~$36 to keep.
+
+**What changed:**
+- Installed [`skhd`](https://github.com/koekeishiya/skhd) via Homebrew
+  (`brew install koekeishiya/formulae/skhd`) — a free, open-source, ~single-binary
+  hotkey daemon that runs as a LaunchAgent (auto-starts at login).
+- `~/.skhdrc` binds `alt - space` to the **existing, unchanged** `km-macro.sh`.
+  Committed to the repo as `skhdrc`.
+- Added `install-trigger.sh` to make this reproducible on any Mac (installs skhd,
+  writes `~/.skhdrc` pointing at the local clone, starts the service).
+- Granted skhd Accessibility permission (the one manual, per-machine step).
+- Updated `CLAUDE.md` and `README.md`.
+
+**Why skhd over the other two candidates:**
+- *Shortcuts/Automator Quick Action* — zero install, but Apple's Services hotkeys
+  have become fiddly/unreliable for true global use; more clicks to set up.
+- *Raycast/Alfred* — neither was installed; a whole app is overkill for one key.
+- *skhd* — matches the minimalist spirit of the project: one tiny binary, one
+  line of config, version-controllable, free forever, no menu-bar nagware.
+
+**New failure mode to know about:** if ⌥Space dies, it's almost always skhd
+losing Accessibility permission after a macOS update. Check
+`tail /tmp/skhd_$USER.err.log` for `must be run with accessibility access`,
+re-grant `/opt/homebrew/bin/skhd`, then `skhd --restart-service`. The old
+"KM Engine dormant" diagnosis no longer applies.

@@ -1,16 +1,17 @@
 # Markdug
 
-A tiny floating macOS app that renders Markdown beautifully. No Dock icon. Press Escape or Cmd+W to dismiss. Triggered by a hotkey via Keyboard Maestro.
+A tiny floating macOS app that renders Markdown beautifully. No Dock icon. Press Escape or Cmd+W to dismiss. Triggered by a hotkey via **skhd** (a free, open-source hotkey daemon).
 
 ---
 
 ## What it does
 
 ```
-alt+space  →  Keyboard Maestro  →  gets selected file from Finder
-                                →  calls: mdug /path/to/file.md
-                                →  Markdug.app appears (floating)
-                                →  press Escape or Cmd+W to dismiss and quit
+alt+space  →  skhd hotkey daemon  →  runs km-macro.sh
+                                  →  gets selected file from Finder
+                                  →  launches Markdug.app (floating)
+                                  →  press Escape or Cmd+W to dismiss and quit
+                                  →  alt+space again toggles it closed
 ```
 
 ---
@@ -88,60 +89,33 @@ A window should appear with rendered Markdown. Press Escape or Cmd+W to close.
 
 ---
 
-## Keyboard Maestro setup
+## Hotkey setup (skhd)
 
-### Install Keyboard Maestro
+The ⌥Space hotkey is provided by [skhd](https://github.com/koekeishiya/skhd) — a tiny, free, open-source hotkey daemon. It runs in the background as a login agent. No licence, no nagware. (This replaced Keyboard Maestro, whose lapsed-trial dormancy kept silently breaking the trigger.)
 
-Buy/download from https://www.keyboardmaestro.com (~$36, one-time). The engine runs in the background and is very lightweight.
-
-Set it to launch at login: click the Keyboard Maestro Engine icon in your menu bar → Launch Engine at Login.
-
-### Create the macro
-
-1. Open Keyboard Maestro
-2. Click **+** to create a new macro
-3. Name it `Markdown Viewer`
-4. Add trigger: **Hot Key trigger** → press `⌥Space` (alt+space)
-5. Add action: **Execute Shell Script**
-6. Set the output dropdown to **Asynchronously**
-7. Paste this script:
+### One command
 
 ```bash
-#!/bin/bash
-FILEPATH=$(osascript -e '
-tell application "Finder"
-    set sel to selection
-    if sel is {} then
-        return ""
-    else
-        return POSIX path of (item 1 of sel as alias)
-    end if
-end tell
-')
-
-if [ -z "$FILEPATH" ]; then
-    osascript -e 'display notification "No file selected in Finder" with title "Markdown Viewer"'
-    exit 0
-fi
-
-case "$FILEPATH" in
-    *.md|*.markdown|*.mdx|*.mdown)
-        /Applications/Markdug.app/Contents/MacOS/Markdug "$FILEPATH" &
-        ;;
-    *)
-        osascript -e "display notification \"Not a Markdown file\" with title \"Markdown Viewer\""
-        ;;
-esac
+./install-trigger.sh
 ```
 
-8. Save the macro
+This installs skhd via Homebrew, writes `~/.skhdrc` (binding ⌥Space to this repo's `km-macro.sh`), and starts the login service.
+
+### Grant Accessibility permission (one time)
+
+skhd can't capture keystrokes until macOS lets it. The installer prints this, but to do it manually:
+
+1. **System Settings → Privacy & Security → Accessibility**
+2. Click **+**, press **⌘⇧G**, paste `/opt/homebrew/bin/skhd`, add it
+3. Toggle it **on**
+4. Back in the terminal: `skhd --restart-service`
 
 ### Test it
 
 - Open Finder
 - Click any `.md` file to select it (single click)
-- Press ⌥Space
-- Markdug should appear instantly
+- Press ⌥Space → Markdug appears instantly
+- Press ⌥Space again → it toggles closed
 
 ---
 
@@ -157,9 +131,13 @@ Right-click the app in /Applications → Open → Open anyway. You only need to 
 
 **⌥Space doesn't trigger**
 
-- Check the Keyboard Maestro macro is enabled (green dot next to it)
-- Make sure Keyboard Maestro Engine is running (check menu bar)
-- Some apps capture ⌥Space — try a different hotkey like ⌃⌥Space
+- Is the daemon running? `pgrep -lx skhd` (should print a PID)
+- Check the error log: `tail /tmp/skhd_$USER.err.log`. The line
+  `must be run with accessibility access` means the Accessibility permission was
+  lost (common after a macOS update) — re-grant it for `/opt/homebrew/bin/skhd`
+  and run `skhd --restart-service`. An empty log = it's capturing fine.
+- Some apps capture ⌥Space — try a different hotkey by editing `~/.skhdrc`
+  (e.g. `ctrl + alt - space`) then `skhd --restart-service`
 
 **Images in Markdown aren't showing**
 
@@ -180,6 +158,9 @@ Window size defaults to 900×700. Change the `width` and `height` constants in `
 ```bash
 rm -rf /Applications/Markdug.app
 sudo rm /usr/local/bin/mdug
+skhd --stop-service
+brew uninstall skhd        # optional — only if nothing else uses skhd
+rm -f ~/.skhdrc
 ```
 
-Then delete the Keyboard Maestro macro.
+Then remove `/opt/homebrew/bin/skhd` from System Settings → Privacy & Security → Accessibility.

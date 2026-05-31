@@ -1,0 +1,10 @@
+# skhd config for Markdug
+# Installed to ~/.skhdrc by install-trigger.sh
+#
+# Option+Space renders the .md file currently selected in Finder
+# (and toggles the window closed if Markdug is already open).
+# Reuses km-macro.sh unchanged — skhd just supplies the global hotkey.
+#
+# Assumes the repo is cloned to ~/Sites/Markdug. If you clone elsewhere,
+# edit the path below (or re-run install-trigger.sh, which rewrites it).
+alt - space : ~/Sites/Markdug/km-macro.sh

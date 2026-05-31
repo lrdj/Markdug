@@ -143,5 +143,5 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "  Test it:  mdug ~/path/to/some/file.md"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo "Next: set up Keyboard Maestro — see README.md"
+echo "Next: set up the ⌥Space hotkey — run ./install-trigger.sh (see README.md)"
 echo ""
