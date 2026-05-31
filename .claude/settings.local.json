@@ -10,7 +10,12 @@
       "Bash(open *)",
       "Bash(chmod +x /Users/dug.falby/Sites/Markdug/install-trigger.sh)",
       "Bash(git add *)",
-      "Bash(git commit -q -m ' *)"
+      "Bash(git commit -q -m ' *)",
+      "Read(//Applications/Markdug.app/**)",
+      "Read(//usr/local/bin/**)",
+      "Bash(skhd --stop-service)",
+      "Bash(brew uninstall *)",
+      "Bash(./install-trigger.sh)"
     ]
   }
 }
