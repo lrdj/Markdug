@@ -2,7 +2,15 @@
   "permissions": {
     "allow": [
       "Read(//Applications/Markdug.app/Contents/MacOS/**)",
-      "Read(//Applications/Markdug.app/Contents/Resources/**)"
+      "Read(//Applications/Markdug.app/Contents/Resources/**)",
+      "Bash(brew install *)",
+      "Bash(skhd --version)",
+      "Bash(skhd --start-service)",
+      "Bash(launchctl list *)",
+      "Bash(open *)",
+      "Bash(chmod +x /Users/dug.falby/Sites/Markdug/install-trigger.sh)",
+      "Bash(git add *)",
+      "Bash(git commit -q -m ' *)"
     ]
   }
 }
