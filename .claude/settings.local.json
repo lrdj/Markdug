@@ -15,7 +15,12 @@
       "Read(//usr/local/bin/**)",
       "Bash(skhd --stop-service)",
       "Bash(brew uninstall *)",
-      "Bash(./install-trigger.sh)"
+      "Bash(./install-trigger.sh)",
+      "Read(//Users/dug/**)",
+      "Read(//Users/dug/Library/LaunchAgents/**)",
+      "Bash(plutil -lint /Applications/Markdug.app/Contents/Info.plist)",
+      "Bash(/Applications/Markdug.app/Contents/MacOS/Markdug /Users/dug/Sites/Markdug/README.md)",
+      "Bash(tccutil reset *)"
     ]
   }
 }
