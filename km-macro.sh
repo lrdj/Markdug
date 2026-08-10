@@ -27,7 +27,7 @@ fi
 
 case "$FILEPATH" in
     *.md|*.markdown|*.mdx|*.mdown)
-        /Applications/Markdug.app/Contents/MacOS/Markdug "$FILEPATH" &
+        "$HOME/Applications/Markdug.app/Contents/MacOS/Markdug" "$FILEPATH" &
         ;;
     *)
         osascript -e "display notification \"Not a Markdown file\" with title \"Markdug\""

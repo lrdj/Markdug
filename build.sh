@@ -89,19 +89,21 @@ fi
 # The compiled binary loads marked.js at runtime from Resources
 # (this is handled in the Swift code via Bundle.main.path)
 
-# ── Install to /Applications ─────────────────────────────────────────────────
-echo "📲 Installing to /Applications..."
-rm -rf "/Applications/$APP_NAME.app"
-cp -R "$APP_BUNDLE" "/Applications/$APP_NAME.app"
+# ── Install to ~/Applications (no root needed) ───────────────────────────────
+INSTALL_DIR="$HOME/Applications"
+echo "📲 Installing to $INSTALL_DIR..."
+mkdir -p "$INSTALL_DIR"
+rm -rf "$INSTALL_DIR/$APP_NAME.app"
+cp -R "$APP_BUNDLE" "$INSTALL_DIR/$APP_NAME.app"
 
 # ── Code sign ────────────────────────────────────────────────────────────────
 echo "🔏 Signing..."
-codesign --force --deep --sign - "/Applications/$APP_NAME.app"
+codesign --force --deep --sign - "$INSTALL_DIR/$APP_NAME.app"
 
 # ── Register URL scheme ──────────────────────────────────────────────────────
 echo "🔗 Registering URL scheme..."
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
-    -f "/Applications/$APP_NAME.app" 2>/dev/null || true
+    -f "$INSTALL_DIR/$APP_NAME.app" 2>/dev/null || true
 
 # ── Flush icon caches ─────────────────────────────────────────────────────────
 echo "🔄 Flushing icon caches..."
@@ -109,10 +111,12 @@ killall Finder 2>/dev/null || true
 killall Dock 2>/dev/null || true
 
 # ── Create CLI helper ────────────────────────────────────────────────────────
-CLI_PATH="/usr/local/bin/mdug"
+CLI_DIR="$HOME/.local/bin"
+CLI_PATH="$CLI_DIR/mdug"
 echo "🔧 Creating CLI tool at $CLI_PATH..."
+mkdir -p "$CLI_DIR"
 
-cat > /tmp/mdug_cli << 'CLIPYTHON'
+cat > "$CLI_PATH" << 'CLIPYTHON'
 #!/usr/bin/env python3
 import sys
 import subprocess
@@ -132,9 +136,22 @@ subprocess.run([
 ])
 CLIPYTHON
 
-sudo mkdir -p /usr/local/bin
-sudo cp /tmp/mdug_cli "$CLI_PATH"
-sudo chmod +x "$CLI_PATH"
+chmod +x "$CLI_PATH"
+
+# ── Make sure ~/.local/bin is on PATH ────────────────────────────────────────
+PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
+PATH_WARNING=""
+case ":$PATH:" in
+    *":$CLI_DIR:"*) ;;
+    *)
+        SHELL_RC="$HOME/.zshrc"
+        [ -n "$ZDOTDIR" ] && SHELL_RC="$ZDOTDIR/.zshrc"
+        if ! grep -qF "$CLI_DIR" "$SHELL_RC" 2>/dev/null; then
+            { echo ""; echo "# Added by Markdug build.sh — so the mdug CLI is on PATH"; echo "$PATH_LINE"; } >> "$SHELL_RC"
+            PATH_WARNING="Added $CLI_DIR to PATH in $SHELL_RC — restart your terminal (or run: source $SHELL_RC)"
+        fi
+        ;;
+esac
 
 echo ""
 echo "✅ Markdug installed!"
@@ -142,6 +159,7 @@ echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  Test it:  mdug ~/path/to/some/file.md"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+[ -n "$PATH_WARNING" ] && echo "⚠️  $PATH_WARNING"
 echo ""
 echo "Next: set up the ⌥Space hotkey — run ./install-trigger.sh (see README.md)"
 echo ""

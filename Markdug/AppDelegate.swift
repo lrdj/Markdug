@@ -79,8 +79,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc func openInSublime() {
         guard let path = currentFilePath else { return }
         let task = Process()
-        task.launchPath = "/usr/local/bin/subl"
-        task.arguments = [path]
+        task.launchPath = "/usr/bin/open"
+        task.arguments = ["-a", "Sublime Text", path]
         try? task.run()
     }
 
