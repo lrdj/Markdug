@@ -6,7 +6,7 @@ This file is for AI assistants. It describes the architecture, design decisions,
 
 ## What Markdug is
 
-A minimal macOS app that renders Markdown files in a floating window. Triggered by a keyboard shortcut via a macOS **Quick Action** (an Automator Service — replaced skhd on 2026-08-10, because skhd needs Homebrew + an Accessibility grant, neither available on a machine without admin rights). Shows a Dock icon while open. Press Escape or Cmd+W to quit.
+A minimal macOS app that renders Markdown files in a floating window. Triggered by a keyboard shortcut via a **Shortcuts.app** shortcut (replaced an Automator Quick Action on 2026-08-10 — the Quick Action's Run Shell Script action was unreliable and difficult to debug on a standard, non-admin account with no way to copy/paste diagnostics off it). Shows a Dock icon while open. Press Escape or Cmd+W to quit.
 
 It exists to fill a specific gap: the user edits `.md` files in Sublime Text and views them canonically on GitHub, but needed a fast zero-friction way to read Markdown locally without opening an editor or browser.
 
@@ -17,19 +17,20 @@ Everything — the app, the CLI tool, and the hotkey — installs entirely withi
 ## How it works
 
 ```
-User selects .md file in Finder
-  → presses ⌥Space
-  → macOS dispatches the shortcut to the "Toggle Markdug" Quick Action (a Service)
-  → the Quick Action runs km-macro.sh
+User selects .md file in Finder (Finder must be the focused app)
+  → presses ⌃⌥Space
+  → macOS dispatches the shortcut to the "Toggle Markdug" Shortcuts.app shortcut
+  → the shortcut runs km-macro.sh via a Run Shell Script action
   → checks if Markdug is already running (if yes: quits it — toggle behaviour)
   → if no: calls ~/Applications/Markdug.app/Contents/MacOS/Markdug /path/to/file.md
   → Markdug window appears with rendered Markdown
   → user presses Escape, Cmd+W, or clicks the red traffic light to quit
+  → (to toggle closed via keystroke instead: click back into Finder, then ⌃⌥Space again — see gotcha below)
 ```
 
 `km-macro.sh` is unchanged in spirit across every trigger mechanism this project
-has used (Keyboard Maestro → skhd → Quick Action) — only the thing that invokes
-it changed. The filename is kept for continuity.
+has used (Keyboard Maestro → skhd → Quick Action → Shortcuts.app) — only the
+thing that invokes it changed. The filename is kept for continuity.
 
 ---
 
@@ -40,9 +41,10 @@ Markdug/
 ├── CLAUDE.md                  ← you are here
 ├── README.md                  ← user-facing install instructions
 ├── build.sh                   ← compiles and installs the app (all to $HOME, no root)
-├── install-trigger.sh         ← installs the "Toggle Markdug" Quick Action into ~/Library/Services
-├── Toggle Markdug.workflow/   ← committed Automator Quick Action bundle (Info.plist + document.wflow)
-├── km-macro.sh                ← the trigger script the Quick Action runs (reads Finder selection, launches app)
+├── install-trigger.sh         ← (historical, superseded 2026-08-10) installed the old Quick Action into ~/Library/Services
+├── Toggle Markdug.workflow/   ← (historical, superseded 2026-08-10) committed Automator Quick Action bundle — kept for reference/rollback
+├── debugging-10Aug.md         ← checkpoint-based build/debug guide for the Shortcuts.app trigger
+├── km-macro.sh                ← the trigger script the Shortcuts.app shortcut runs (reads Finder selection, launches app)
 └── Markdug/
     ├── AppDelegate.swift      ← the entire app (~175 lines)
     ├── Info.plist             ← app metadata, URL scheme registration
@@ -86,57 +88,62 @@ A single-file Swift app. No Xcode project, no storyboards, no SwiftUI. Just `App
 
 `~/.local/bin/mdug` is a small Python 3 script installed by `build.sh`. It takes a file path, resolves it to an absolute path, and launches the app via `open -a Markdug --args`. `open -a` finds apps in `~/Applications` automatically, same as `/Applications` — no change needed there for the move to a per-user install location.
 
-### The hotkey trigger (Quick Action)
+### The hotkey trigger (Shortcuts.app)
 
-Since 2026-08-10 the ⌥Space hotkey is supplied by a macOS **Quick Action**
-(`Toggle Markdug.workflow`, an Automator Service bundle committed to the repo).
-Quick Actions are a first-class OS feature: assigning one a global keyboard
-shortcut happens entirely in **System Settings → Keyboard → Keyboard
-Shortcuts… → Services**, by any standard account, with no admin password —
-because the OS itself owns the global-shortcut dispatch, unlike a background
-daemon (skhd, Keyboard Maestro) that needs Accessibility permission to capture
-raw key events itself.
+Since 2026-08-10 the hotkey is supplied by a **Shortcuts.app** shortcut named
+`Toggle Markdug`, containing a single **Run Shell Script** action that calls
+`km-macro.sh`. Built by hand in the Shortcuts.app GUI — unlike the old Quick
+Action, this isn't scriptable/committable to the repo, so there's no
+`install-trigger.sh` equivalent. See `debugging-10Aug.md` for the full
+checkpoint-based build guide; summary:
 
-- The bundle lives at `Toggle Markdug.workflow/` in the repo, with the shell
-  command in `Contents/document.wflow` containing the placeholder
-  `__MACRO_PATH__`.
-- `install-trigger.sh` copies the bundle to `~/Library/Services/`, replaces
-  `__MACRO_PATH__` with this repo's actual `km-macro.sh` path (via `sed`, same
-  pattern the old `~/.skhdrc` generation used), and runs
-  `/System/Library/CoreServices/pbs -update` to refresh the Services cache.
-- Binding the actual shortcut (⌥Space) is a one-time **manual step** in System
-  Settings — it can't be scripted, but it needs nothing beyond what any
-  logged-in account already has.
+1. Shortcuts → Settings → Advanced → enable **"Allow Running Scripts"** (off
+   by default; the Run Shell Script action is otherwise blocked or missing).
+2. New shortcut → `Toggle Markdug` → add **Run Shell Script** action → shell
+   `/bin/bash`, input **nothing**, script body:
+   `/bin/bash "$HOME/Sites/Markdug/km-macro.sh"` (path adjusted per account).
+3. Test standalone first (▶ Run inside the Shortcuts editor, with a `.md`
+   file selected in Finder) before touching any hotkey — this isolates the
+   script layer from the trigger layer. First run triggers a one-time
+   **Automation** consent dialog (System Settings → Privacy & Security →
+   Automation → Shortcuts → Finder) for the AppleScript call to Finder — a
+   standard per-user toggle, not an admin gate, but easy to dismiss by
+   accident.
+4. Bind the keyboard shortcut in the shortcut's own detail pane
+   (ⓘ → "Add Keyboard Shortcut") if offered; otherwise enable "Use as Quick
+   Action" / "Show in Services Menu" and bind via System Settings → Keyboard
+   → Keyboard Shortcuts… → Services, same place the old Quick Action was
+   bound.
+5. Test independent of the hotkey with `shortcuts run "Toggle Markdug"` — the
+   `automator ~/Library/Services/...` equivalent for this trigger.
 
-**Building/verifying the workflow bundle:** the `document.wflow` XML format is
-undocumented and easy to get subtly wrong (this project has direct history of
-silently-broken plists — see the Info.plist gotcha below). Before trusting a
-hand-written one, verify it actually executes:
-```bash
-automator "Toggle Markdug.workflow"   # runs the workflow's actions directly, no Services registration needed
-```
-and verify it registers correctly as a Service with:
-```bash
-/System/Library/CoreServices/pbs -update
-/System/Library/CoreServices/pbs -dump | grep -A5 -i markdug
-```
+**Shortcut is ⌃⌥Space, not ⌥Space:** plain ⌥Space did not register — likely
+already claimed elsewhere on this account. ⌃⌥Space works.
 
-`km-macro.sh` itself (the script the Quick Action runs) behaviour is unchanged:
+`km-macro.sh` itself (the script the shortcut runs) is unchanged:
 - Uses AppleScript to get the selected file path from Finder
 - Checks if Markdug is running via `pgrep` — if yes, kills it (toggle)
 - Checks file extension is `.md`, `.markdown`, `.mdx`, or `.mdown`
 - Launches via the full app binary path: `~/Applications/Markdug.app/Contents/MacOS/Markdug "$FILEPATH" &`
 
-**Quick Action gotchas:**
-- If ⌥Space stops working, first check the Quick Action is actually installed:
-  `ls ~/Library/Services` should list `Toggle Markdug.workflow`.
-- If it's installed but not listed in System Settings → Keyboard Shortcuts →
-  Services, re-run `install-trigger.sh` to refresh the Services cache
-  (`pbs -update`), or log out and back in.
-- If it's listed but ⌥Space does nothing, test the Quick Action directly
-  (bypassing the hotkey and Services layer entirely) with
-  `automator ~/Library/Services/Toggle\ Markdug.workflow` — if that doesn't
-  launch Markdug, the bug is in `km-macro.sh` or the app, not the trigger.
+**Known limitation — Finder must be focused to close via keystroke:** because
+the shortcut is bound as a Finder Quick Action/Service rather than a truly
+global System Settings shortcut, ⌃⌥Space only fires when Finder is the active
+app. Opening Markdug from a Finder selection works fine; toggling it *closed*
+by keystroke requires clicking back into Finder first, then pressing
+⌃⌥Space — pressing it while Markdug itself is focused does nothing. Escape,
+Cmd+W, or the red traffic light still close the window at any time. See
+**Planned features** for possible fixes.
+
+**Shortcuts.app gotchas:**
+- If the hotkey stops working, first test with `shortcuts run "Toggle Markdug"`
+  to rule out the trigger layer, then run it standalone from inside the
+  Shortcuts editor (▶) to rule out the script layer.
+- If nothing happens on either test, check Shortcuts → Settings → Advanced →
+  "Allow Running Scripts" is still enabled, and check System Settings →
+  Privacy & Security → Automation → Shortcuts → Finder is still granted.
+- Remember the shortcut only fires with Finder focused — before assuming it's
+  broken, check which app is active.
 
 ---
 
@@ -198,8 +205,18 @@ regardless of `sudo` access, even for the account's own settings.
 Neither is available on a standard (non-admin) macOS account. The fix was to
 stop using a background daemon that captures raw key events at all, and use a
 Quick Action instead — a keyboard shortcut assigned via System Settings, which
-is a standard per-user preference with no elevated-privilege gate. If ⌥Space
-misbehaves today, see the **Quick Action gotchas** above, not this section.
+is a standard per-user preference with no elevated-privilege gate.
+
+### (Historical) Automator Quick Action was unreliable and hard to debug on the standard account
+**Resolved 2026-08-10 by moving the hotkey to a Shortcuts.app shortcut — kept here for context.**
+The Quick Action (`Toggle Markdug.workflow`) worked in principle — no root,
+no Homebrew, no Accessibility grant — but proved unreliable in practice on the
+locked-down standard account, and debugging it was slow going with no
+copy/paste between accounts to compare state. No root cause was conclusively
+confirmed before the decision was made to pivot rather than keep debugging;
+`Toggle Markdug.workflow` and `install-trigger.sh` are kept in the repo for
+reference/rollback but are no longer the active trigger. If the hotkey
+misbehaves today, see the **Shortcuts.app gotchas** above, not this section.
 
 The app itself can always be proven healthy independent of the trigger:
    `~/Applications/Markdug.app/Contents/MacOS/Markdug ~/Sites/Markdug/README.md`
@@ -214,10 +231,10 @@ The app itself can always be proven healthy independent of the trigger:
 - Custom app icon (displays in Finder and Dock)
 - Window size and position remembered between launches
 - "Open in Sublime" pill button in title bar (calls `open -a "Sublime Text"` — no CLI shim needed)
-- Toggle behaviour via the ⌥Space Quick Action (opens, ⌥Space again closes)
+- Toggle behaviour via the ⌃⌥Space Shortcuts.app shortcut (opens from Finder; to close via keystroke, focus Finder then press ⌃⌥Space again — see gotcha above)
 - Escape or Cmd+W quits the app entirely
 - Closing the window quits the app entirely
-- Fully root-free install: app in `~/Applications`, CLI in `~/.local/bin`, hotkey via a per-user Quick Action
+- Fully root-free install: app in `~/Applications`, CLI in `~/.local/bin`, hotkey via a per-user Shortcuts.app shortcut
 
 ---
 
@@ -225,6 +242,7 @@ The app itself can always be proven healthy independent of the trigger:
 
 - Trigger from Sublime Text (not just Finder) — open the currently active file
 - Remove Dock icon (.accessory activation policy) — previously caused silent window failure, needs revisiting
+- Make the toggle-closed keystroke work regardless of which app is focused (currently must re-focus Finder first) — likely needs either a genuinely global shortcut binding rather than a Finder Quick Action/Service, or an in-app key handler inside Markdug itself for the close half of the toggle
 
 ## Done
 
@@ -235,6 +253,11 @@ The app itself can always be proven healthy independent of the trigger:
   app to `~/Applications` and the CLI to `~/.local/bin`; replaced the `subl` CLI
   shim with `open -a "Sublime Text"`. Nothing in the install or trigger path
   needs `sudo`, an admin password, or Homebrew.
+- ~~Shortcuts.app trigger~~ — **done 2026-08-10**: replaced the Automator Quick
+  Action with a Shortcuts.app shortcut (⌃⌥Space) after the Quick Action proved
+  unreliable and hard to debug on the standard account. Trade-off: the
+  shortcut only fires with Finder focused, so closing Markdug via keystroke
+  needs a re-focus-Finder step first — see Planned features.
 
 ---
 
@@ -263,12 +286,15 @@ cd ~/path/to/Markdug && ./build.sh
 ~/Applications/Markdug.app/Contents/MacOS/Markdug ~/path/to/file.md
 ```
 
-### Set up / repair the ⌥Space hotkey (Quick Action)
+### Set up / repair the ⌃⌥Space hotkey (Shortcuts.app)
+No install script — the shortcut is built by hand in Shortcuts.app. See
+`debugging-10Aug.md` for the full checkpoint guide. Quick checks:
 ```bash
-cd ~/path/to/Markdug && ./install-trigger.sh   # then bind ⌥Space in System Settings (see README.md)
-ls ~/Library/Services                            # is "Toggle Markdug.workflow" there?
-automator ~/Library/Services/Toggle\ Markdug.workflow   # test the Quick Action directly, bypassing the hotkey
+shortcuts run "Toggle Markdug"   # test the shortcut directly, bypassing the hotkey
 ```
+- Not firing at all via ⌃⌥Space? Check Finder is the focused app first (known limitation).
+- Fires via CLI but not the hotkey? Rebind in the shortcut's ⓘ detail pane, or via System Settings → Keyboard → Keyboard Shortcuts… → Services.
+- Doesn't fire via CLI either? Check Shortcuts → Settings → Advanced → "Allow Running Scripts", and System Settings → Privacy & Security → Automation → Shortcuts → Finder.
 
 ### Test the CLI
 ```bash

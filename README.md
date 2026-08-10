@@ -1,18 +1,20 @@
 # Markdug
 
-A tiny floating macOS app that renders Markdown beautifully. No Dock icon. Press Escape or Cmd+W to dismiss. Triggered by a hotkey via a macOS **Quick Action** — no admin rights required.
+A tiny floating macOS app that renders Markdown beautifully. No Dock icon. Press Escape or Cmd+W to dismiss. Triggered by a hotkey via a **Shortcuts.app** shortcut — no admin rights required.
 
 ---
 
 ## What it does
 
 ```
-alt+space  →  Quick Action ("Toggle Markdug")  →  runs km-macro.sh
-                                               →  gets selected file from Finder
-                                               →  launches Markdug.app (floating)
-                                               →  press Escape or Cmd+W to dismiss and quit
-                                               →  alt+space again toggles it closed
+ctrl+alt+space (Finder focused)  →  Shortcuts.app shortcut ("Toggle Markdug")  →  runs km-macro.sh
+                                                                              →  gets selected file from Finder
+                                                                              →  launches Markdug.app (floating)
+                                                                              →  press Escape or Cmd+W to dismiss and quit
+                                                                              →  focus Finder, ctrl+alt+space again to toggle closed
 ```
+
+Note: the hotkey only fires while Finder is the focused app — pressing it while Markdug's own window is focused does nothing (click back into Finder first). Escape, Cmd+W, or the red traffic light always close the window regardless of focus.
 
 Everything installs into your own home directory — the app, the CLI tool, and the hotkey. No `sudo`, no Homebrew, no admin password, no Accessibility permission grant.
 
@@ -87,32 +89,39 @@ A window should appear with rendered Markdown. Press Escape or Cmd+W to close.
 
 ---
 
-## Hotkey setup (Quick Action)
+## Hotkey setup (Shortcuts.app)
 
-The ⌥Space hotkey is a macOS **Quick Action** — Apple's own mechanism for binding a keyboard shortcut to a script, configured entirely in System Settings. It needs no background daemon, no Homebrew, and no Accessibility permission, because the OS itself owns the global shortcut, not the script.
+The hotkey is a **Shortcuts.app** shortcut running a Run Shell Script action — Apple's own automation app, no background daemon, no Homebrew, no Accessibility permission needed. It's built by hand in the Shortcuts app GUI (there's no install script for this part — Shortcuts don't have a simple committable file format the way the old Automator Quick Action did).
 
-### One command
+### Build the shortcut (one time)
 
-```bash
-./install-trigger.sh
-```
-
-This copies this repo's `Toggle Markdug.workflow` into `~/Library/Services`, points it at this repo's `km-macro.sh`, and refreshes the Services menu.
+1. **Shortcuts app → Settings → Advanced** → turn on **"Allow Running Scripts"**
+2. New shortcut → name it **Toggle Markdug**
+3. Add action: **Run Shell Script** — Shell: `/bin/bash`, Input: nothing, script:
+   ```
+   /bin/bash "$HOME/path/to/Markdug/km-macro.sh"
+   ```
+   (use this repo's actual path on your machine)
+4. Select a `.md` file in Finder, then hit **Run (▶)** inside the Shortcuts editor to test it standalone before wiring up a hotkey. The first run will prompt a one-time Automation permission dialog (Shortcuts → Finder) — allow it.
 
 ### Bind the shortcut (one time)
 
-1. **System Settings → Keyboard → Keyboard Shortcuts… → Services**
-2. Find **Toggle Markdug** under **General**
-3. Double-click its shortcut column and press **⌥Space**
+Try the shortcut's own detail pane first — click its ⓘ icon and look for **"Add Keyboard Shortcut"**. If that's not available on your macOS version, fall back to Services:
 
-No admin password needed — assigning a keyboard shortcut to a Service is a standard per-user preference.
+1. In the shortcut's settings, enable **"Use as Quick Action"** / **"Show in Services Menu"**
+2. **System Settings → Keyboard → Keyboard Shortcuts… → Services**
+3. Find **Toggle Markdug**, double-click its shortcut column, and set your combo
+
+No admin password needed either way — this is a standard per-user preference. Plain **⌥Space** may already be claimed by something else on your Mac; **⌃⌥Space** (ctrl+alt+space) is a safer bet if ⌥Space alone doesn't register.
 
 ### Test it
 
 - Open Finder
 - Click any `.md` file to select it (single click)
-- Press ⌥Space → Markdug appears instantly
-- Press ⌥Space again → it toggles closed
+- Press your hotkey (e.g. ⌃⌥Space) → Markdug appears instantly
+- Click back into Finder, press the hotkey again → it toggles closed
+
+Or test independent of the hotkey entirely: `shortcuts run "Toggle Markdug"`
 
 ---
 
@@ -126,14 +135,13 @@ Almost always a macOS target version mismatch. Check `swift --version`, find the
 
 Right-click the app in `~/Applications` → Open → Open anyway. You only need to do this once. This happens because the app isn't signed with an Apple Developer certificate — it's your own personal build.
 
-**⌥Space doesn't trigger**
+**Hotkey doesn't trigger**
 
-- Check the Quick Action is installed: `ls ~/Library/Services` should list `Toggle Markdug.workflow`
-- Check the shortcut is actually bound: System Settings → Keyboard → Keyboard Shortcuts… → Services → General → **Toggle Markdug**
-- If it's not there at all, re-run `./install-trigger.sh` — it refreshes the Services cache
-- Some apps capture ⌥Space — bind a different combination in the same Services panel instead
-- You can test the Quick Action in isolation, without the hotkey, by running:
-  `automator ~/Library/Services/Toggle\ Markdug.workflow`
+- Check you're pressing it with Finder focused — the shortcut is scoped to Finder, so it does nothing while Markdug or any other app is active (click into Finder first, or select a `.md` file, then press the hotkey)
+- Test the shortcut logic directly, bypassing the hotkey entirely: `shortcuts run "Toggle Markdug"`
+- If that does nothing either, check Shortcuts → Settings → Advanced → **"Allow Running Scripts"** is still on, and System Settings → Privacy & Security → Automation → Shortcuts → Finder is still granted
+- If the CLI test works but the hotkey doesn't, re-check the binding: the shortcut's own ⓘ detail pane, or System Settings → Keyboard → Keyboard Shortcuts… → Services → **Toggle Markdug**
+- Some combinations (plain ⌥Space, for instance) may already be claimed elsewhere — try ⌃⌥Space or another combination in the same binding panel
 
 **`mdug: command not found`**
 
@@ -162,8 +170,6 @@ Window size defaults to 900×700. Change the `width` and `height` constants in `
 ```bash
 rm -rf ~/Applications/Markdug.app
 rm -f ~/.local/bin/mdug
-rm -rf ~/Library/Services/"Toggle Markdug.workflow"
-/System/Library/CoreServices/pbs -update
 ```
 
-Then remove the ⌥Space binding in System Settings → Keyboard → Keyboard Shortcuts… → Services (if you want).
+Then delete the **Toggle Markdug** shortcut in Shortcuts.app, and remove its keyboard binding (its own ⓘ pane, or System Settings → Keyboard → Keyboard Shortcuts… → Services) if you want.
