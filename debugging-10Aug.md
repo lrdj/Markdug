@@ -1,25 +1,66 @@
-Two things to check, in order:
+# Trying Shortcuts.app as the ⌥Space trigger
 
-1. Isolate it with a trivial test (2 minutes, no AppleScript involved):
+Pivoting the hotkey trigger from the Automator Quick Action to a
+**Shortcuts.app** shortcut, to try on the standard (non-admin) account.
+Debugging the Quick Action there is difficult (no copy/paste between
+accounts), so this is structured as a sequence of checkpoints — each step
+proves itself before moving to the next, so a failure narrows down to exactly
+one layer.
 
-/usr/libexec/PlistBuddy -c "Set :actions:0:action:ActionParameters:COMMAND_STRING 'date >> ~/Desktop/markdug-test.txt'" ~/Library/Services/Toggle Markdug.workflow/Contents/document.wflow
+## 1. Enable script execution first (easy to miss)
 
-Then click Finder → Services → Toggle Markdug again.
+Shortcuts → Settings (or Shortcuts menu → Settings) → Advanced → turn on
+**"Allow Running Scripts"**. Without this the Run Shell Script action either
+won't be offered or will silently fail. Per-user toggle, no admin needed.
 
-- File appears on Desktop → Run Shell Script execution works fine via
-Services; the AppleScript/Finder-selection call specifically is what's blocked
-(Automation permission theory confirmed).
-- Nothing appears → the Run Shell Script action isn't executing at all via
-this path, which is a more fundamental block (possibly Gatekeeper refusing to
-run script content from an unsigned/downloaded Automator bundle on this
-locked-down account).
+## 2. Build the shortcut
 
-Afterwards, restore the real script with ./install-trigger.sh from the repo.
+- Shortcuts.app → new shortcut → name it `Toggle Markdug`
+- Add action: search for **"Run Shell Script"**
+- Shell: `/bin/bash` (or `/bin/zsh`), Input: **nothing** (`km-macro.sh` gets
+  the file itself via AppleScript, it doesn't need stdin)
+- Script content: the full path to `km-macro.sh` on *this* account, e.g.
+  ```
+  /bin/bash "$HOME/Sites/Markdug/km-macro.sh"
+  ```
+  (adjust to wherever the repo actually lives on the standard account)
 
-2. Check Console.app while you click it — Applications → Utilities → Console,
-select your Mac in the sidebar, click Toggle Markdug in Finder's Services
-menu, and look for anything mentioning "not allowed to send Apple events,"
-"TCC," "denied," or "sandbox" around that moment.
+## 3. Test it standalone — before touching any hotkey
 
-Let me know what the test file shows — that tells us which of the two problems
-we're actually dealing with.
+Select a `.md` file in Finder, then in the Shortcuts editor hit **Run** (▶)
+on the shortcut itself. This isolates the shell-script layer from the
+trigger layer.
+
+If Markdug doesn't appear, check for a permissions prompt — the first
+`osascript`/AppleScript call to Finder from Shortcuts triggers a one-time
+**Automation** consent dialog (System Settings → Privacy & Security →
+Automation → Shortcuts → Finder). That's a normal user-consent toggle, not an
+admin gate, but easy to dismiss by accident and then wonder why nothing
+happens.
+
+## 4. Assign the keyboard shortcut
+
+In the shortcut's detail pane there's usually an **"Add Keyboard Shortcut"**
+field directly in the Shortcuts app (click the ⓘ / details icon on the
+shortcut) — try that first, simpler than going through Services. If it's not
+offered on this macOS version, fall back to: toggle **"Use as Quick Action"**
+/ **"Show in Services Menu"** in the shortcut's settings, then bind it the
+same way as the old Quick Action — System Settings → Keyboard → Keyboard
+Shortcuts → Services.
+
+## 5. Test via CLI, bypassing the hotkey entirely
+
+```bash
+shortcuts run "Toggle Markdug"
+```
+
+This is the `automator ~/Library/Services/...` equivalent — confirms the
+shortcut fires correctly independent of whatever ⌥Space is or isn't doing.
+If this works but ⌥Space doesn't, the bug is purely in the key-binding step
+(4), not the shortcut logic.
+
+## Report back
+
+At whichever checkpoint something breaks, note which step failed and what
+was observed (nothing happened / permission prompt / wrong error) — that
+narrows it down far faster than "it doesn't work."
